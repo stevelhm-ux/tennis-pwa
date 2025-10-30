@@ -1,12 +1,17 @@
+// src/main.tsx
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import AuthGate from './AuthGate'
+import './index.css'
 
-const el = document.getElementById('root')!
-
-createRoot(document.getElementById('root')!).render(
-  <AuthGate><App /></AuthGate>
+const rootEl = document.getElementById('root')!
+createRoot(rootEl).render(
+  <React.StrictMode>
+    <AuthGate>
+      <App />
+    </AuthGate>
+  </React.StrictMode>
 )
 
 if ('serviceWorker' in navigator) {
