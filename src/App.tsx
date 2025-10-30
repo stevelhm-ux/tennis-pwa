@@ -8,20 +8,27 @@ import { SyncStatus } from '@/components/SyncStatus'
 import { runSync } from '@/lib/sync'
 import { fetchMatchPoints } from '@/lib/api'
 import { subscribeToMatchPoints } from '@/lib/realtime'
+import { ensureBootstrap } from '@/bootstrap'
 import './index.css'
 
 export default function App() {
   const { points, initMatch, loadPoints } = useMatchStore()
 
-  useEffect(() => {
-    const id = 'local-demo-match'
-    initMatch(id, 'A').then(async () => {
-      await loadPoints(id)
-      await fetchMatchPoints(id)
-    })
-    const off = subscribeToMatchPoints('local-demo-match')
-    return () => off()
-  }, [])
+useEffect(() => {
+  let off: (() => void) | undefined
+  (async () => {
+    // Creates/locates workspace, players, match, then returns a real UUID
+    const id = await ensureBootstrap()
+
+    await initMatch(id, 'A')
+    await loadPoints(id)
+    await fetchMatchPoints(id)
+
+    off = subscribeToMatchPoints(id)
+  })().catch(console.error)
+
+  return () => { if (off) off() }
+}, [])
 
   useEffect(() => {
     const id = setInterval(() => { runSync('demo-workspace') }, 5000)
