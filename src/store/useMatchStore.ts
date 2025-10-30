@@ -40,7 +40,7 @@ export const useMatchStore = create<State & Actions>((set, get) => ({
     const last = points[points.length-1]
     if (!last) return
     await db.points.delete(last.id)
-    await db.outbox.add({ type: 'point.delete', payload: { id: last.id }, created_at: new Date().toISOString() })
+    await db.outbox.add({ type: 'point.delete', payload: { match_id: last.match_id, seq: last.seq }, created_at: new Date().toISOString() })
     set({ points: points.slice(0,-1), seq: seq - 1 })
   },
 }))
