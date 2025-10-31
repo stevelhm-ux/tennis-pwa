@@ -16,6 +16,7 @@ export interface Match {
   workspace_id: string
   player_a_id: string
   player_b_id: string
+  tournament_id?: string | null   // ← new
   event?: string
   surface?: 'Hard' | 'Clay' | 'Grass' | 'Carpet'
   format?: 'BO3' | 'BO5'
@@ -41,4 +42,16 @@ export interface Point {
   created_by?: string
   created_at?: string
   deleted_at?: string | null
+}
+
+// Add this new interface
+export interface Tournament {
+  id: string
+  workspace_id: string
+  name: string
+  venue?: string | null
+  date?: string | null   // ISO "YYYY-MM-DD"
+  grade?: 1 | 2 | 3 | 4 | 5
+  created_by?: string
+  created_at?: string
 }
