@@ -69,6 +69,9 @@ export default function App() {
   return (
     <div className="max-w-md mx-auto p-4">
       <h1 className="text-xl font-bold mb-3">Tennis Tracker</h1>
+      <div className="text-xs text-slate-500 mb-1">
+        {localStorage.getItem('tournament_id') ? 'Tournament selected' : 'No tournament'}
+      </div>
       <ScoreBar
         setsA={score.setsA} setsB={score.setsB}
         gamesA={score.gamesA} gamesB={score.gamesB}
