@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMatchStore } from '@/store/useMatchStore'
 import { computeLiveScore } from '@/lib/matchEngine'
 import { ScoreBar } from '@/components/ScoreBar'
@@ -8,28 +8,44 @@ import { SyncStatus } from '@/components/SyncStatus'
 import { runSync } from '@/lib/sync'
 import { fetchMatchPoints } from '@/lib/api'
 import { subscribeToMatchPoints } from '@/lib/realtime'
-import { ensureBootstrap } from '@/bootstrap'
+import { ensureWorkspaceAndPlayers, createMatchWithTournament } from '@/bootstrap'
+import TournamentPicker from '@/components/TournamentPicker'
 import './index.css'
 
 export default function App() {
   const { points, initMatch, loadPoints } = useMatchStore()
+  const [wsInfo, setWsInfo] = useState<{wsId:string,aId:string,bId:string} | null>(null)
+  const [tournamentId, setTournamentId] = useState<string | null>(localStorage.getItem('tournament_id'))
+  const [matchId, setMatchId] = useState<string | null>(localStorage.getItem('match_id'))
 
-useEffect(() => {
-  let off: (() => void) | undefined
-  (async () => {
-    // Creates/locates workspace, players, match, then returns a real UUID
-    const id = await ensureBootstrap()
+  // Step 1: Ensure workspace + players
+  useEffect(() => {
+    ;(async () => {
+      const info = await ensureWorkspaceAndPlayers()
+      setWsInfo(info)
+    })().catch(console.error)
+  }, [])
 
-    await initMatch(id, 'A')
-    await loadPoints(id)
-    await fetchMatchPoints(id)
+  // Step 2: If we have tournament+match, load; otherwise wait for selection
+  useEffect(() => {
+    if (!wsInfo) return
+    ;(async () => {
+      if (tournamentId && !matchId) {
+        const id = await createMatchWithTournament({ ...wsInfo, tournamentId })
+        localStorage.setItem('match_id', id)
+        setMatchId(id)
+      }
+      const idToUse = matchId
+      if (!idToUse) return
+      await initMatch(idToUse, 'A')
+      await loadPoints(idToUse)
+      await fetchMatchPoints(idToUse)
+      const off = subscribeToMatchPoints(idToUse)
+      return () => off()
+    })().catch(console.error)
+  }, [wsInfo, tournamentId, matchId])
 
-    off = subscribeToMatchPoints(id)
-  })().catch(console.error)
-
-  return () => { if (off) off() }
-}, [])
-
+  // Sync loop
   useEffect(() => {
     const id = setInterval(() => { runSync('demo-workspace') }, 5000)
     return () => clearInterval(id)
@@ -37,14 +53,33 @@ useEffect(() => {
 
   const score = useMemo(() => computeLiveScore(points), [points])
 
+  // If no tournament picked yet, show the picker
+  if (wsInfo && !tournamentId) {
+    return (
+      <TournamentPicker
+        workspaceId={wsInfo.wsId}
+        onSelected={(tid) => {
+          localStorage.setItem('tournament_id', tid)
+          setTournamentId(tid)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="max-w-md mx-auto p-4">
       <h1 className="text-xl font-bold mb-3">Tennis Tracker</h1>
-      <ScoreBar setsA={score.setsA} setsB={score.setsB} gamesA={score.gamesA} gamesB={score.gamesB} pointText={score.pointText} server={score.server} />
+      <ScoreBar
+        setsA={score.setsA} setsB={score.setsB}
+        gamesA={score.gamesA} gamesB={score.gamesB}
+        pointText={score.pointText} server={score.server}
+      />
       <PointPad />
       <StatsPanel />
       <SyncStatus />
-      <div className="mt-6 text-xs text-slate-500">Demo mode: add Supabase keys in .env to sync & subscribe.</div>
+      <div className="mt-6 text-xs text-slate-500">
+        {tournamentId ? `Tournament selected ✔` : 'Pick a tournament to begin'}
+      </div>
     </div>
   )
 }
