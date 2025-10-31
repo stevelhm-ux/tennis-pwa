@@ -1,3 +1,4 @@
+
 import type { Point } from './types'
 
 export interface LiveScore {

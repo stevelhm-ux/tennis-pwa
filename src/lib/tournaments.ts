@@ -1,7 +1,8 @@
-import { supabase } from '@/lib/supabase'
-import type { Tournament } from '@/lib/types'
 
-export async function listTournaments(workspaceId: string) {
+import { supabase } from './supabase'
+import type { Tournament } from './types'
+
+export async function listTournaments(workspaceId: string): Promise<Tournament[]> {
   if (!supabase) return []
   const { data, error } = await supabase
     .from('tournaments')
@@ -9,15 +10,12 @@ export async function listTournaments(workspaceId: string) {
     .eq('workspace_id', workspaceId)
     .order('date', { ascending: false })
   if (error) throw error
-  return (data || []) as Tournament[]
+  return data as Tournament[]
 }
 
 export async function createTournament(workspaceId: string, t: {
-  name: string
-  venue?: string
-  date?: string  // YYYY-MM-DD
-  grade?: 1|2|3|4|5
-}) {
+  name: string; venue?: string; date?: string; grade?: 1|2|3|4|5
+}): Promise<Tournament> {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase
     .from('tournaments')

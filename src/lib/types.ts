@@ -1,14 +1,26 @@
+
 export type Role = 'owner' | 'coach' | 'scorer' | 'viewer'
 
 export interface Workspace { id: string; name: string }
 export interface User { id: string; email: string; name?: string | null }
+
+export interface Tournament {
+  id: string
+  workspace_id: string
+  name: string
+  venue?: string | null
+  date?: string | null   // YYYY-MM-DD
+  grade?: 1|2|3|4|5
+  created_by?: string | null
+  created_at?: string
+}
 
 export interface Player {
   id: string
   workspace_id: string
   name: string
   handedness?: 'R' | 'L'
-  notes?: string
+  notes?: string | null
 }
 
 export interface Match {
@@ -16,11 +28,13 @@ export interface Match {
   workspace_id: string
   player_a_id: string
   player_b_id: string
-  tournament_id?: string | null   // ← new
-  event?: string
-  surface?: 'Hard' | 'Clay' | 'Grass' | 'Carpet'
-  format?: 'BO3' | 'BO5'
-  start_time?: string
+  tournament_id?: string | null
+  event?: string | null
+  surface?: 'Hard' | 'Clay' | 'Grass' | 'Carpet' | null
+  format?: 'BO3' | 'BO5' | null
+  start_time?: string | null
+  created_by?: string | null
+  created_at?: string | null
 }
 
 export type Shot = 'FH'|'BH'|'Serve'|'Return'|'Volley'|'Overhead'|null
@@ -39,19 +53,7 @@ export interface Point {
   outcome: AB
   finish_type: FinishType
   tags: string[]
-  created_by?: string
-  created_at?: string
+  created_by?: string | null
+  created_at?: string | null
   deleted_at?: string | null
-}
-
-// Add this new interface
-export interface Tournament {
-  id: string
-  workspace_id: string
-  name: string
-  venue?: string | null
-  date?: string | null   // ISO "YYYY-MM-DD"
-  grade?: 1 | 2 | 3 | 4 | 5
-  created_by?: string
-  created_at?: string
 }
