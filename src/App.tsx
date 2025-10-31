@@ -72,6 +72,9 @@ export default function App() {
       <div className="text-xs text-slate-500 mb-1">
         {localStorage.getItem('tournament_id') ? 'Tournament selected' : 'No tournament'}
       </div>
+      <button className="text-xs underline" onClick={() => { localStorage.removeItem('tournament_id'); localStorage.removeItem('match_id'); window.location.reload() }}>
+        Change tournament
+      </button>
       <ScoreBar
         setsA={score.setsA} setsB={score.setsB}
         gamesA={score.gamesA} gamesB={score.gamesB}
