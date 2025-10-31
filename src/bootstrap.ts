@@ -1,4 +1,3 @@
-// src/bootstrap.ts
 import { supabase } from '@/lib/supabase'
 
 export async function ensureBootstrap(): Promise<string> {
@@ -11,7 +10,7 @@ export async function ensureBootstrap(): Promise<string> {
   const uid = sess?.session?.user?.id
   if (!uid) throw new Error('Not signed in')
 
-  // 1) Find existing membership
+  // Find one workspace you belong to (created earlier in your flow)
   const { data: existing } = await supabase
     .from('workspace_members')
     .select('workspace_id')
@@ -19,27 +18,16 @@ export async function ensureBootstrap(): Promise<string> {
     .limit(1)
 
   let wsId = existing?.[0]?.workspace_id as string | undefined
-
-  // 2) If none, create workspace WITHOUT select(), using a client UUID
   if (!wsId) {
+    // First-time bootstrap: create workspace without select, then add self as owner
     wsId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).toString()
-
-    // Insert workspace (no select)
-    let { error: e1 } = await supabase
-      .from('workspaces')
-      .insert({ id: wsId, name: 'Family Team' })
+    let { error: e1 } = await supabase.from('workspaces').insert({ id: wsId, name: 'Family Team' })
     if (e1) throw e1
-
-    // Add self as FIRST member (owner) — relies on the "self bootstrap first member" policy
-    const { error: e2 } = await supabase
-      .from('workspace_members')
-      .insert({ workspace_id: wsId, user_id: uid, role: 'owner' })
+    const { error: e2 } = await supabase.from('workspace_members').insert({ workspace_id: wsId, user_id: uid, role: 'owner' })
     if (e2) throw e2
   }
 
-  // From here, you ARE a member → SELECT/INSERT policies for members apply
-
-  // 3) Ensure two players
+  // Ensure two players
   const { data: players } = await supabase
     .from('players')
     .select('id')
@@ -49,30 +37,57 @@ export async function ensureBootstrap(): Promise<string> {
   let aId = players?.[0]?.id
   let bId = players?.[1]?.id
   if (!aId || !bId) {
-    const toCreate = []
+    const toCreate: any[] = []
     if (!aId) toCreate.push({ workspace_id: wsId, name: 'Player A', handedness: 'R' })
     if (!bId) toCreate.push({ workspace_id: wsId, name: 'Opponent', handedness: 'R' })
-    const { data: created, error: e3 } = await supabase.from('players').insert(toCreate).select()
-    if (e3) throw e3
+    const { data: created, error: pe } = await supabase.from('players').insert(toCreate).select()
+    if (pe) throw pe
     const all = [...(players ?? []), ...(created ?? [])]
     aId = aId || all[0]?.id
     bId = bId || all[1]?.id
   }
 
-  // 4) Create a match and return its id
-  const { data: match, error: e4 } = await supabase
+  // Ensure a tournament in this workspace (reuse the most recent, else create one)
+  const { data: ts } = await supabase
+    .from('tournaments')
+    .select('id')
+    .eq('workspace_id', wsId)
+    .order('date', { ascending: false })
+    .limit(1)
+
+  let tId = ts?.[0]?.id as string | undefined
+  if (!tId) {
+    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    const { data: t, error: te } = await supabase
+      .from('tournaments')
+      .insert({
+        workspace_id: wsId,
+        name: 'Practice',
+        date: today,
+        grade: 4,
+        created_by: uid
+      })
+      .select()
+      .single()
+    if (te) throw te
+    tId = t.id
+  }
+
+  // Create a match linked to the tournament
+  const { data: match, error: me } = await supabase
     .from('matches')
     .insert({
-      workspace_id: wsId!,
+      workspace_id: wsId,
       player_a_id: aId!,
       player_b_id: bId!,
+      tournament_id: tId!,
       event: 'Practice',
       surface: 'Hard',
       format: 'BO3'
     })
     .select()
     .single()
-  if (e4) throw e4
+  if (me) throw me
 
   localStorage.setItem('match_id', match.id)
   return match.id
