@@ -72,4 +72,10 @@ export default function App() {
 /** Small footer that shows which build/version is running */
 function FooterBuild() {
   return (
-    <div className="max-w-md mx-
+    <div className="max-w-md mx-auto px-4">
+      <div className="mt-6 mb-2 text-xs text-slate-400">
+        Build: {import.meta.env.VITE_BUILD_ID ?? 'dev'}
+      </div>
+    </div>
+  )
+}
