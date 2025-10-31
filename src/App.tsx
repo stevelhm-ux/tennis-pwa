@@ -78,9 +78,9 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto p-4">
-      <h1 className="text-xl font-bold mb-3">Tennis Tracker</h1>
-      <div className="text-xs text-slate-500 mb-1">
-        {localStorage.getItem('tournament_id') ? 'Tournament selected' : 'No tournament'}
+      <h1 className="text-xl font-bold mb-1">Tennis Tracker</h1>
+      <div className="text-xs text-slate-600 mb-3">
+        {tournament ? <>Tournament: <span className="font-medium">{tournament.name}</span></>: 'No tournament selected'}
       </div>
       <button className="text-xs underline" onClick={() => { localStorage.removeItem('tournament_id'); localStorage.removeItem('match_id'); window.location.reload() }}>
         Change tournament
