@@ -10,6 +10,7 @@ import { fetchMatchPoints } from '@/lib/api'
 import { subscribeToMatchPoints } from '@/lib/realtime'
 import { ensureWorkspaceAndPlayers, createMatchWithTournament } from '@/bootstrap'
 import TournamentPicker from '@/components/TournamentPicker'
+import { getTournamentById } from '@/lib/tournaments'
 import './index.css'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
   const [wsInfo, setWsInfo] = useState<{wsId:string,aId:string,bId:string} | null>(null)
   const [tournamentId, setTournamentId] = useState<string | null>(localStorage.getItem('tournament_id'))
   const [matchId, setMatchId] = useState<string | null>(localStorage.getItem('match_id'))
+  const [tournament, setTournament] = useState<{ id:string; name:string } | null>(null)
 
   // Step 1: Ensure workspace + players
   useEffect(() => {
@@ -50,6 +52,14 @@ export default function App() {
     const id = setInterval(() => { runSync('demo-workspace') }, 5000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    if (!tournamentId) { setTournament(null); return }
+    (async () => {
+      const t = await getTournamentById(tournamentId)
+      setTournament({ id: t.id, name: t.name })
+    })().catch(console.error)
+  }, [tournamentId])
 
   const score = useMemo(() => computeLiveScore(points), [points])
 
