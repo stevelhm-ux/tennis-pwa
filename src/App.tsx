@@ -51,3 +51,7 @@ export default function App() {
     </>
   )
 }
+
+<div className="mt-6 text-xs text-slate-400">
+  Build: {import.meta.env.VITE_BUILD_ID ?? 'dev'}
+</div>
