@@ -1,4 +1,3 @@
-
 import { supabase } from './supabase'
 import type { Tournament } from './types'
 
@@ -32,6 +31,19 @@ export async function getTournamentById(id: string) {
     .from('tournaments')
     .select('id,name,venue,date,grade')
     .eq('id', id)
+    .single()
+  if (error) throw error
+  return data as Tournament
+}
+
+/* NEW: update tournament details */
+export async function updateTournament(id: string, patch: Partial<Pick<Tournament,'name'|'venue'|'date'|'grade'>>) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('tournaments')
+    .update(patch)
+    .eq('id', id)
+    .select()
     .single()
   if (error) throw error
   return data as Tournament
