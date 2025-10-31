@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react'
 import { db } from '@/lib/db'
 export function SyncStatus(){

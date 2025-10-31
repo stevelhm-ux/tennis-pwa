@@ -1,3 +1,4 @@
+
 import React from 'react'
 export function ScoreBar({ setsA, setsB, gamesA, gamesB, pointText, server }:{setsA:number;setsB:number;gamesA:number;gamesB:number;pointText:string;server:'A'|'B'}){
   return (

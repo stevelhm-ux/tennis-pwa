@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react'
 import { listTournaments, createTournament } from '@/lib/tournaments'
 import type { Tournament } from '@/lib/types'
@@ -7,7 +8,7 @@ export default function TournamentPicker({
   onSelected,
 }: {
   workspaceId: string
-  onSelected: (tournamentId: string) => void
+  onSelected: (tournament: Tournament) => void
 }) {
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<Tournament[]>([])
@@ -34,7 +35,7 @@ export default function TournamentPicker({
         grade: form.grade,
       })
       setItems([t, ...items])
-      onSelected(t.id)
+      onSelected(t)
     } finally {
       setCreating(false)
     }
@@ -43,8 +44,8 @@ export default function TournamentPicker({
   if (loading) return <div className="p-4">Loading tournaments…</div>
 
   return (
-    <div className="p-4 max-w-md mx-auto">
-      <h2 className="text-lg font-semibold mb-3">Select Tournament</h2>
+    <div className="p-4">
+      <h2 className="text-lg font-semibold mb-3">Tournaments</h2>
 
       {items.length > 0 && (
         <div className="space-y-2 mb-4">
@@ -52,7 +53,7 @@ export default function TournamentPicker({
             <button
               key={t.id}
               className="w-full text-left bg-white border rounded-xl p-3 hover:bg-slate-50 active:scale-[0.99]"
-              onClick={() => onSelected(t.id)}
+              onClick={() => onSelected(t)}
             >
               <div className="font-medium">{t.name} {t.grade ? <span className="text-xs text-slate-500">• G{t.grade}</span> : null}</div>
               <div className="text-xs text-slate-500">
