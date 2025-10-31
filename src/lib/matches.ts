@@ -63,3 +63,16 @@ async function updateMatchPlayerB(matchId: string, playerBId: string) {
   if (error) throw error
   return data as Match
 }
+
+// src/lib/matches.ts (append)
+export async function getMatchById(matchId: string): Promise<Match> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('id', matchId)
+    .single()
+  if (error) throw error
+  return data as Match
+}
+
