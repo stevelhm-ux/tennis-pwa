@@ -12,6 +12,7 @@ import type { Tournament } from '@/lib/types'
 import { getMatchById } from '@/lib/matches'
 import { getPlayersByIds } from '@/lib/players'
 import { getTournamentById } from '@/lib/tournaments'
+import { exportMatchCsv } from '@/lib/exportCsv'
 
 export default function ScoringPage({
   matchId,
@@ -73,48 +74,9 @@ export default function ScoringPage({
   const score = useMemo(() => computeLiveScore(points), [points])
 
   // --- Export to CSV (points of this match) ---
-  function exportCSV() {
-    const header = [
-      'seq','server','first_serve_in','second_serve_in','rally_len',
-      'finishing_shot','outcome','finish_type','tags','created_at'
-    ]
-    const rows = points.map(p => [
-      p.seq,
-      p.server,
-      p.first_serve_in ?? '',
-      p.second_serve_in ?? '',
-      p.rally_len ?? '',
-      p.finishing_shot ?? '',
-      p.outcome,
-      p.finish_type ?? '',
-      (p.tags || []).join('|'),
-      p.created_at ?? ''
-    ])
-
-    const lines = [
-      `# Tournament: ${title || ''}`,
-      `# My Player: ${playerLabels.A}`,
-      `# Opponent: ${playerLabels.B}`,
-      header.join(','),
-      ...rows.map(r =>
-        r.map(v => {
-          const s = String(v)
-          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-        }).join(',')
-      )
-    ]
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const safeName = (title || 'tournament').replace(/[^a-z0-9-_]+/gi, '_')
-    a.download = `${safeName}.csv`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
+ function exportCSV() {
+  exportMatchCsv(matchId).catch(console.error)
+}
 
   return (
     <div className="max-w-md mx-auto p-4">
