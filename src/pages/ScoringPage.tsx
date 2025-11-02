@@ -99,15 +99,25 @@ export default function ScoringPage({
   }
 
   return (
-    <div className="max-w-md mx-auto p-4">
-      {/* ✅ shows tournament name when available */}
-      <Header title={title} onBack={onBack} />
-
+      {/* Small bar with actions */}
       <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-slate-500">Match: {matchId.slice(0,8)}…</div>
-        <button onClick={exportCSV} className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50">
-          Export CSV
-        </button>
+        {/* LEFT: show tournament name (from resolved `title`) */}
+        <div className="text-xs text-slate-600">
+          Tournament: <span className="font-medium">{title}</span>
+        </div>
+      
+        {/* RIGHT: actions + tiny match id */}
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:block text-[10px] text-slate-400">
+            ID: {matchId.slice(0,8)}…
+          </div>
+          <button
+            onClick={exportCSV}
+            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
 
       <ScoreBar
