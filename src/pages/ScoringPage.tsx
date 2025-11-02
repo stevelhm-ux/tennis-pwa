@@ -15,23 +15,26 @@ import { getTournamentById } from '@/lib/tournaments'
 
 export default function ScoringPage({
   matchId,
-  tournament,       // may be undefined; we’ll resolve name if so
+  tournament,     // may be undefined; we’ll resolve if needed
   onBack
 }:{
-  matchId:string
+  matchId: string
   tournament?: Tournament | null
-  onBack:()=>void
+  onBack: () => void
 }) {
   const { points, initMatch, loadPoints } = useMatchStore()
 
-  // Labels for players
-  const [playerLabels, setPlayerLabels] = useState<{A:string,B:string}>({ A: 'Player A', B: 'Player B' })
+  // Player labels
+  const [playerLabels, setPlayerLabels] = useState<{ A: string; B: string }>({
+    A: 'Player A',
+    B: 'Player B',
+  })
   const myPlayerName = (localStorage.getItem('my_player_name') || '').trim()
 
-  // Title handling (tournament name or fallback)
+  // Tournament title to display
   const [title, setTitle] = useState<string>(tournament?.name || 'Score Pad')
 
-  // Load local & remote points, subscribe to realtime
+  // Load local & remote points, then subscribe
   useEffect(() => {
     (async () => {
       await initMatch(matchId, 'A')
@@ -42,10 +45,9 @@ export default function ScoringPage({
     return () => off()
   }, [matchId])
 
-  // Resolve player names and tournament title if needed
+  // Resolve player names and tournament title
   useEffect(() => {
     (async () => {
-      // Player labels
       const m = await getMatchById(matchId)
       const ids = [m.player_a_id, m.player_b_id].filter(Boolean) as string[]
       const map = await getPlayersByIds(ids)
@@ -53,7 +55,6 @@ export default function ScoringPage({
       const b = map[m.player_b_id]?.name || 'Opponent'
       setPlayerLabels({ A: a, B: b })
 
-      // Tournament title
       if (tournament?.name) {
         setTitle(tournament.name)
       } else if (m.tournament_id) {
@@ -71,56 +72,75 @@ export default function ScoringPage({
 
   const score = useMemo(() => computeLiveScore(points), [points])
 
-  // Export CSV (unchanged)
+  // --- Export to CSV (points of this match) ---
   function exportCSV() {
-    const header = ['seq','server','first_serve_in','second_serve_in','rally_len','finishing_shot','outcome','finish_type','tags','created_at']
+    const header = [
+      'seq','server','first_serve_in','second_serve_in','rally_len',
+      'finishing_shot','outcome','finish_type','tags','created_at'
+    ]
     const rows = points.map(p => [
-      p.seq, p.server, p.first_serve_in ?? '', p.second_serve_in ?? '', p.rally_len ?? '',
-      p.finishing_shot ?? '', p.outcome, p.finish_type ?? '', (p.tags || []).join('|'), p.created_at ?? ''
+      p.seq,
+      p.server,
+      p.first_serve_in ?? '',
+      p.second_serve_in ?? '',
+      p.rally_len ?? '',
+      p.finishing_shot ?? '',
+      p.outcome,
+      p.finish_type ?? '',
+      (p.tags || []).join('|'),
+      p.created_at ?? ''
     ])
+
     const lines = [
       `# Tournament: ${title || ''}`,
-      `# Match ID: ${matchId}`,
       `# My Player: ${playerLabels.A}`,
       `# Opponent: ${playerLabels.B}`,
       header.join(','),
-      ...rows.map(r => r.map(v => {
-        const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s
-      }).join(','))
+      ...rows.map(r =>
+        r.map(v => {
+          const s = String(v)
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+        }).join(',')
+      )
     ]
+
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     const safeName = (title || 'tournament').replace(/[^a-z0-9-_]+/gi, '_')
-    a.download = `${safeName}_${matchId.slice(0,8)}.csv`
-    document.body.appendChild(a); a.click(); a.remove()
+    a.download = `${safeName}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
     URL.revokeObjectURL(url)
   }
 
   return (
-     
+    <div className="max-w-md mx-auto p-4">
+      {/* Header shows tournament name */}
+      <Header title={title} onBack={onBack} />
+
+      {/* Actions bar: tournament name on left, Export on right (no match ID) */}
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs text-slate-600">
           Tournament: <span className="font-medium">{title}</span>
         </div>
-      
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:block text-[10px] text-slate-400">
-            ID: {matchId.slice(0,8)}…
-          </div>
-          
-          <button
-            onClick={exportCSV}
-            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50">
-            Export CSV
-          </button>
-        </div>
+        <button
+          onClick={exportCSV}
+          className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
+        >
+          Export CSV
+        </button>
+      </div>
 
       <ScoreBar
-        setsA={score.setsA} setsB={score.setsB}
-        gamesA={score.gamesA} gamesB={score.gamesB}
-        pointText={score.pointText} server={score.server}
+        setsA={score.setsA}
+        setsB={score.setsB}
+        gamesA={score.gamesA}
+        gamesB={score.gamesB}
+        pointText={score.pointText}
+        server={score.server}
         playerALabel={playerLabels.A}
         playerBLabel={playerLabels.B}
       />
@@ -130,3 +150,4 @@ export default function ScoringPage({
     </div>
   )
 }
+
