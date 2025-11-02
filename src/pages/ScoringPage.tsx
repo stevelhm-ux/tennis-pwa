@@ -99,14 +99,12 @@ export default function ScoringPage({
   }
 
   return (
-      {/* Small bar with actions */}
+     
       <div className="flex items-center justify-between mb-3">
-        {/* LEFT: show tournament name (from resolved `title`) */}
         <div className="text-xs text-slate-600">
           Tournament: <span className="font-medium">{title}</span>
         </div>
       
-        {/* RIGHT: actions + tiny match id */}
         <div className="flex items-center gap-3">
           <div className="hidden sm:block text-[10px] text-slate-400">
             ID: {matchId.slice(0,8)}…
