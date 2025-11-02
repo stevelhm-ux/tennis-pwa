@@ -109,14 +109,13 @@ export default function ScoringPage({
           <div className="hidden sm:block text-[10px] text-slate-400">
             ID: {matchId.slice(0,8)}…
           </div>
+          
           <button
             onClick={exportCSV}
-            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
-          >
+            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50">
             Export CSV
           </button>
         </div>
-      </div>
 
       <ScoreBar
         setsA={score.setsA} setsB={score.setsB}
