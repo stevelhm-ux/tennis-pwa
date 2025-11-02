@@ -4,16 +4,24 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import AuthGate from './AuthGate'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import AuthCallback from './pages/AuthCallback'
 import './index.css'
 
 // Render
 const rootEl = document.getElementById('root')!
+
+const isAuthCallback = location.pathname === '/auth/callback'
+
 createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <AuthGate>
-        <App />
-      </AuthGate>
+      {isAuthCallback ? (
+        <AuthCallback />
+      ) : (
+        <AuthGate>
+          <App />
+        </AuthGate>
+      )}
     </ErrorBoundary>
   </React.StrictMode>
 )
