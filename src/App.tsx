@@ -4,8 +4,9 @@ import TournamentsPage from '@/pages/TournamentsPage'
 import MatchesPage from '@/pages/MatchesPage'
 import ScoringPage from '@/pages/ScoringPage'
 import { SyncStatus } from '@/components/SyncStatus'
-import { runSync } from '@/lib/sync'
 import type { Tournament } from '@/lib/types'
+import { runSync } from '@/lib/sync'
+import { ensureWorkspace } from '@/bootstrap'
 import './index.css'
 
 type View =
@@ -15,22 +16,38 @@ type View =
 
 export default function App() {
   const [view, setView] = useState<View>({ name: 'tournaments' })
+  const [wsId, setWsId] = useState<string | null>(null)
 
-  // Background sync loop (keeps pushing outbox -> Supabase)
+  // Resolve a real workspace on boot (for sync loop)
   useEffect(() => {
-    const id = setInterval(() => {
-      // You can replace 'demo-workspace' with a real workspaceId if you store it
-      runSync('demo-workspace').catch(console.error)
-    }, 5000)
-    return () => clearInterval(id)
+    (async () => {
+      try {
+        const id = await ensureWorkspace()
+        setWsId(id)
+      } catch (e) {
+        console.error('ensureWorkspace failed', e)
+      }
+    })()
   }, [])
 
-  // Render by view
+  // Background sync: only when we have a real workspace id
+  useEffect(() => {
+    if (!wsId) return
+    const id = setInterval(() => {
+      runSync(wsId).catch(err => console.error('runSync error', err))
+    }, 5000)
+    return () => clearInterval(id)
+  }, [wsId])
+
+  // --- Views ---
   if (view.name === 'tournaments') {
     return (
       <>
         <TournamentsPage
-          onEnterTournament={(t, wsId) => setView({ name: 'matches', tournament: t, wsId })}
+          onEnterTournament={(t, realWsId) => {
+            setWsId(realWsId) // keep app-level wsId in sync
+            setView({ name: 'matches', tournament: t, wsId: realWsId })
+          }}
         />
         <FooterBuild />
         <SyncStatus />
