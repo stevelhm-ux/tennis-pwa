@@ -29,9 +29,25 @@ export function computeLiveScore(points: Point[], bestOf: 3|5 = 3): LiveScore {
 export function basicStats(points: Point[]) {
   const total = points.length
   const wonA = points.filter(p => p.outcome==='A').length
-  const serves = points.filter(p => p.finish_type==='Ace' || p.first_serve_in!==null || p.second_serve_in!==null)
-  const firstIn = points.filter(p => p.first_serve_in===true).length
-  const doubleFaults = points.filter(p => p.finish_type==='DF').length
-  const rallyAvg = total? (points.reduce((a,p)=>a+(p.rally_len||0),0)/total):0
-  return { totalPoints: total, pctWonA: total? wonA/total:0, firstServeInPct: serves.length? firstIn/serves.length:0, doubleFaults, rallyAvg:Number(rallyAvg.toFixed(1)) }
+
+  // Our (Player A) serve points
+  const servePts = points.filter(p => p.server === 'A')
+  const firstAttempts = servePts.length
+  const firstIn = servePts.filter(p => p.first_serve_in === true).length
+  const dfUs = servePts.filter(p => p.finish_type === 'DF').length
+
+  const firstInPts = servePts.filter(p => p.first_serve_in === true)
+  const firstWon = firstInPts.filter(p => p.outcome === 'A').length
+
+  const secondInPts = servePts.filter(p => p.first_serve_in === false && p.second_serve_in === true)
+  const secondWon = secondInPts.filter(p => p.outcome === 'A').length
+
+  return {
+    totalPoints: total,
+    pctWonA: total ? wonA/total : 0,
+    firstServeInPct: firstAttempts ? firstIn/firstAttempts : 0,
+    doubleFaultsUs: dfUs,
+    firstServePtsWonPct: firstInPts.length ? firstWon/firstInPts.length : 0,
+    secondServePtsWonPct: secondInPts.length ? secondWon/secondInPts.length : 0,
+  }
 }
