@@ -94,19 +94,8 @@ export default function ScoringPage({
           Export CSV
         </button>
       </div>
-
-      <ScoreBar
-        setsA={score.setsA}
-        setsB={score.setsB}
-        gamesA={score.gamesA}
-        gamesB={score.gamesB}
-        pointText={score.pointText}
-        server={score.server}
-        playerALabel={playerLabels.A}
-        playerBLabel={playerLabels.B}
-      />
-
-      <PointPad />
+      
+      <PerformancePad />
       <StatsPanel />
     </div>
   )
