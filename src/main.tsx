@@ -15,16 +15,13 @@ const isAuthCallback = location.pathname === '/auth/callback'
 createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
-      {isAuthCallback ? (
-        <AuthCallback />
-      ) : (
-        <AuthGate>
-          <App />
-        </AuthGate>
-      )}
+      <AuthGate>
+        <App />
+      </AuthGate>
     </ErrorBoundary>
   </React.StrictMode>
 )
+
 
 // Surface crashes instead of blank screen
 window.addEventListener('unhandledrejection', (e) => {
