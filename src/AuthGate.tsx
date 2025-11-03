@@ -21,12 +21,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!session) {
     const login = async () => {
-      const redirectTo = `${location.origin}/auth/callback`
-      const { error } = await supabase!.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo }
-      })
-      if (error) alert(error.message)
+
+    const redirectTo = `${location.origin}/`  // 👈 return to root
+    const { error } = await supabase!.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo }                  // no manual exchange needed
+    })
+    if (error) alert(error.message)
+
     }
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
