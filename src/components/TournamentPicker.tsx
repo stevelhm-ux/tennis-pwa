@@ -116,7 +116,7 @@ export default function TournamentPicker({
 
       {/* Create new tournament card (same width styling) */}
       <div className="bg-white border rounded-2xl p-3">
-        <div className="font-medium mb-2">Create New</div>
+        <div className="font-medium mb-2">Create New Tournament</div>
         <form onSubmit={submitCreate} className="grid gap-2">
           <input className="border rounded px-3 py-2" placeholder="Name*" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
           <input className="border rounded px-3 py-2" placeholder="Venue" value={form.venue} onChange={e=>setForm({...form, venue:e.target.value})}/>
