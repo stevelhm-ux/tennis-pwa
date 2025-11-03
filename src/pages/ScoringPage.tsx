@@ -5,14 +5,13 @@ import { useMatchStore } from '@/store/useMatchStore'
 import { fetchMatchPoints } from '@/lib/api'
 import { subscribeToMatchPoints } from '@/lib/realtime'
 import { computeLiveScore } from '@/lib/matchEngine'
-import { ScoreBar } from '@/components/ScoreBar'
-import { PointPad } from '@/components/PointPad'
 import { StatsPanel } from '@/components/StatsPanel'
 import type { Tournament } from '@/lib/types'
 import { getMatchById } from '@/lib/matches'
 import { getPlayersByIds } from '@/lib/players'
 import { getTournamentById } from '@/lib/tournaments'
 import { exportMatchCsv } from '@/lib/exportCsv'
+import PerformancePad from '@/components/PerformancePad'
 
 export default function ScoringPage({
   matchId,
