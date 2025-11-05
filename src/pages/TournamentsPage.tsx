@@ -1,3 +1,4 @@
+// ...existing imports...
 import React, { useEffect, useState } from 'react'
 import TournamentPicker from '@/components/TournamentPicker'
 import { Header } from '@/components/Header'
@@ -19,7 +20,7 @@ export default function TournamentsPage({ onEnterTournament }:{ onEnterTournamen
       try {
         const p = await getMyPlayer(id)
         if (p) { setMyPlayerName(p.name); setInputVal(p.name) }
-        else { // fall back to previous local setting if any
+        else {
           const legacy = (localStorage.getItem('my_player_name') || '').trim()
           if (legacy) { setMyPlayerName(legacy); setInputVal(legacy) }
         }
@@ -35,24 +36,92 @@ export default function TournamentsPage({ onEnterTournament }:{ onEnterTournamen
     setEditing(false)
   }
 
+  // ✅ NEW: one-click local reset (IndexedDB + caches + SW + localStorage)
+  async function resetLocal() {
+    // stop any custom sync loop you exposed (optional)
+    // @ts-ignore
+    window.__stopSync?.()
+
+    // try to close Dexie DB if you use it
+    // @ts-ignore
+    if (window.db?.close) window.db.close()
+    // @ts-ignore
+    if (window.Dexie?.delete) { try { await window.Dexie.delete('tennis-tracker') } catch {}
+
+    // delete all IndexedDB databases (best-effort)
+    if ('indexedDB' in window) {
+      try {
+        // @ts-ignore older Safari might not have indexedDB.databases()
+        const dbs = (indexedDB as any).databases ? await (indexedDB as any).databases() : []
+        if (dbs?.length) {
+          for (const d of dbs) {
+            if (!d?.name) continue
+            await new Promise<void>((res) => {
+              const req = indexedDB.deleteDatabase(d.name as string)
+              req.onblocked = req.onerror = req.onsuccess = () => res()
+            })
+          }
+        } else {
+          // fallback: delete by common names you’ve used
+          ['tennis-tracker','tt-store'].forEach(name => {
+            const req = indexedDB.deleteDatabase(name)
+            req.onblocked = req.onerror = req.onsuccess = () => {}
+          })
+        }
+      } catch {}
+    }
+
+    // clear runtime caches
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map(k => caches.delete(k)))
+      }
+    } catch {}
+
+    // localStorage
+    try { localStorage.clear() } catch {}
+
+    // unregister SW so it can’t reopen caches/IDB immediately
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map(r => r.unregister()))
+      }
+    } catch {}
+
+    // hard reload
+    location.replace('/')
+  }
+
   return (
     <div className="max-w-md mx-auto p-4">
       <Header title="Tennis Tracker" />
 
       {/* Top actions */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-slate-500">Workspace: {wsId?.slice(0,8)}…</div>
-        {wsId && (
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="text-xs text-slate-500 truncate">Workspace: {wsId?.slice(0,8)}…</div>
+        <div className="flex items-center gap-2">
+          {wsId && (
+            <button
+              onClick={()=>exportWorkspaceCsv(wsId)}
+              className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
+            >
+              Export All CSV
+            </button>
+          )}
+          {/* ✅ NEW reset button */}
           <button
-            onClick={()=>exportWorkspaceCsv(wsId)}
-            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
+            onClick={resetLocal}
+            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-rose-50"
+            title="Clear local storage, caches, and service worker"
           >
-            Export All CSV
+            Reset local data
           </button>
-        )}
+        </div>
       </div>
 
-      {/* My Player card (aligned width with list cards) */}
+      {/* My Player card ... (unchanged below) */}
       <div className="mb-4 bg-white border rounded-2xl p-3">
         <div className="font-medium mb-2">My Player</div>
         {!editing ? (
