@@ -4,7 +4,7 @@ import type { Match } from '@/lib/types'
 
 /**
  * Create a match and return the server UUID.
- * Make sure you use the returned id when navigating to the scoring page.
+ * Use the returned id when navigating to the scoring page.
  */
 export async function createMatch(params: {
   wsId: string
@@ -30,18 +30,16 @@ export async function createMatch(params: {
 }
 
 /**
- * List matches. If tournamentId is provided, filters within that tournament.
+ * List matches (optionally filter by tournament).
  * Always constrained to the provided workspace.
  */
-export async function listMatches(wsId: string, opts?: { tournamentId?: string }): Promise<Match[]> {
-  let q = supabase
-    .from('matches')
-    .select('*')
-    .eq('workspace_id', wsId)
+export async function listMatches(
+  wsId: string,
+  opts?: { tournamentId?: string }
+): Promise<Match[]> {
+  let q = supabase.from('matches').select('*').eq('workspace_id', wsId)
 
-  if (opts?.tournamentId) {
-    q = q.eq('tournament_id', opts.tournamentId)
-  }
+  if (opts?.tournamentId) q = q.eq('tournament_id', opts.tournamentId)
 
   const { data, error } = await q.order('created_at', { ascending: false })
   if (error) throw error
@@ -57,14 +55,18 @@ export async function getMatch(matchId: string): Promise<Match | null> {
     .single()
 
   if (error) {
-    if ((error as any).code === 'PGRST116') return null // not found
+    // PostgREST not-found code differs by version; treat any single() error as null-ish if no data
+    if ((error as any).code === 'PGRST116') return null
     throw error
   }
   return data as Match
 }
 
-/** Update a match (partial). Returns the updated row. */
-export async function updateMatch(matchId: string, patch: Partial<Match>): Promise<Match> {
+/** Generic update (partial). Returns the updated row. */
+export async function updateMatch(
+  matchId: string,
+  patch: Partial<Match>
+): Promise<Match> {
   const { data, error } = await supabase
     .from('matches')
     .update(patch)
@@ -76,12 +78,28 @@ export async function updateMatch(matchId: string, patch: Partial<Match>): Promi
   return data as Match
 }
 
+/**
+ * Update the opponent name for a match.
+ * Assumes your schema has a `opponent_name text` column on `matches`.
+ * (If you store opponent differently, adjust this to the actual column.)
+ */
+export async function updateMatchOpponent(
+  matchId: string,
+  opponentName: string
+): Promise<Match> {
+  const { data, error } = await supabase
+    .from('matches')
+    .update({ opponent_name: opponentName })
+    .eq('id', matchId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data as Match
+}
+
 /** Delete a match by id */
 export async function deleteMatch(matchId: string): Promise<void> {
-  const { error } = await supabase
-    .from('matches')
-    .delete()
-    .eq('id', matchId)
-
+  const { error } = await supabase.from('matches').delete().eq('id', matchId)
   if (error) throw error
 }
