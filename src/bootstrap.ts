@@ -1,5 +1,6 @@
 // src/bootstrap.ts
 import { supabase } from '@/lib/supabase'
+import { startSync } from '@/lib/sync'
 
 /** Ensure you have a workspace and are an owner member. */
 export async function ensureWorkspace(): Promise<string> {
@@ -26,6 +27,8 @@ export async function ensureWorkspace(): Promise<string> {
       .insert({ workspace_id: wsId, user_id: uid, role: 'owner' })
     if (e2) throw e2
   }
+   ;(window as any).__wsId = wsId       // so the store can find it
+  startSync(wsId)                      // 🔁 start background sync
   return wsId!
 }
 
