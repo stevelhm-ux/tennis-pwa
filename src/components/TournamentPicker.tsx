@@ -1,130 +1,128 @@
-import React, { useEffect, useState } from 'react'
-import { listTournaments, createTournament, updateTournament } from '@/lib/tournaments'
+import React, { useEffect, useState, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
 import type { Tournament } from '@/lib/types'
+
+const AGE_OPTIONS = ['U8','U9','U10','U11'] as const
 
 export default function TournamentPicker({
   workspaceId,
   onSelected,
 }: {
   workspaceId: string
-  onSelected: (tournament: Tournament) => void
+  onSelected: (t: Tournament) => void
 }) {
+  const [list, setList] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(true)
-  const [items, setItems] = useState<Tournament[]>([])
-  const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', venue: '', date: '', grade: 4 as 1|2|3|4|5 })
+  const [name, setName] = useState('')
+  const [venue, setVenue] = useState('')
+  const [date, setDate] = useState<string>('') // yyyy-mm-dd
+  const [grade, setGrade] = useState<number | ''>('')
+  const [age, setAge] = useState<string>('U10')
 
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', venue: '', date: '', grade: 4 as 1|2|3|4|5 })
-
-  async function refresh() {
+  const load = useCallback(async () => {
     setLoading(true)
-    try { setItems(await listTournaments(workspaceId)) }
-    finally { setLoading(false) }
-  }
+    const { data, error } = await supabase!
+      .from('tournaments')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (error) { console.error(error); setList([]) } else setList(data as Tournament[])
+    setLoading(false)
+  }, [workspaceId])
 
-  useEffect(() => { refresh() }, [workspaceId])
+  useEffect(() => { load().catch(console.error) }, [load])
 
-  async function submitCreate(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.name.trim()) return
-    setCreating(true)
-    try {
-      const t = await createTournament(workspaceId, {
-        name: form.name.trim(),
-        venue: form.venue || undefined,
-        date: form.date || undefined,
-        grade: form.grade,
-      })
-      setItems([t, ...items])
-      onSelected(t)
-    } finally {
-      setCreating(false)
+  useEffect(() => {
+    const onShow = () => load()
+    const onVis = () => { if (document.visibilityState === 'visible') load() }
+    window.addEventListener('pageshow', onShow)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('pageshow', onShow)
+      document.removeEventListener('visibilitychange', onVis)
     }
-  }
+  }, [load])
 
-  async function saveEdit(e: React.FormEvent) {
+  useEffect(() => {
+    const ch = supabase!
+      .channel(`rt-tournaments-${workspaceId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'tournaments', filter: `workspace_id=eq.${workspaceId}` },
+        () => load())
+      .subscribe()
+    return () => { supabase!.removeChannel(ch) }
+  }, [workspaceId, load])
+
+  async function createTournament(e: React.FormEvent) {
     e.preventDefault()
-    if (!editingId) return
-    const t = await updateTournament(editingId, {
-      name: editForm.name.trim(),
-      venue: editForm.venue || undefined,
-      date: editForm.date || undefined,
-      grade: editForm.grade,
-    })
-    setItems(prev => prev.map(x => x.id === t.id ? t : x))
-    setEditingId(null)
+    if (!name.trim()) { alert('Please enter a tournament name'); return }
+    const payload: any = {
+      workspace_id: workspaceId,
+      name: name.trim(),
+      venue: venue.trim() || null,
+      date: date || null,
+      grade: grade === '' ? null : Number(grade),
+      age_group: age || null,
+    }
+    const { error } = await supabase!.from('tournaments').insert(payload)
+    if (error) { alert(error.message); return }
+    setName(''); setVenue(''); setDate(''); setGrade(''); setAge('U10')
+    load()
   }
 
-  if (loading) return <div className="p-4">Loading tournaments…</div>
+  function lineInfo(t: Tournament) {
+    const bits = [
+      t.date ? new Date(t.date).toLocaleDateString() : 'Date TBC',
+      t.venue || 'Venue TBC',
+      typeof t.grade === 'number' ? `G${t.grade}` : '',
+      t.age_group || ''
+    ].filter(Boolean)
+    return bits.join(' • ')
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Existing tournaments card */}
+    <div className="space-y-3">
+      {/* Existing tournaments */}
       <div className="bg-white border rounded-2xl p-3">
-        <h2 className="text-lg font-semibold mb-3">Tournaments</h2>
-
-        {items.length > 0 ? (
-          <div className="space-y-2">
-            {items.map(t => {
-              const isEditing = editingId === t.id
-              return (
-                <div key={t.id} className="border rounded-xl p-3">
-                  {!isEditing ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <button
-                        className="text-left flex-1 hover:opacity-80 active:scale-[0.99]"
-                        onClick={() => onSelected(t)}
-                      >
-                        <div className="font-medium">
-                          {t.name} {t.grade ? <span className="text-xs text-slate-500">• G{t.grade}</span> : null}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {t.venue || '—'} {t.date ? `• ${t.date}` : ''}
-                        </div>
-                      </button>
-                      {/* 3) Edit button */}
-                      <button
-                        className="px-3 py-1 text-sm rounded-lg border bg-slate-50 hover:bg-slate-100"
-                        onClick={() => { setEditingId(t.id); setEditForm({ name: t.name, venue: t.venue || '', date: t.date || '', grade: (t.grade || 4) as 1|2|3|4|5 }) }}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  ) : (
-                    <form onSubmit={saveEdit} className="grid gap-2">
-                      <input className="border rounded px-3 py-2" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})} placeholder="Name*" />
-                      <input className="border rounded px-3 py-2" value={editForm.venue} onChange={e=>setEditForm({...editForm, venue:e.target.value})} placeholder="Venue" />
-                      <input className="border rounded px-3 py-2" type="date" value={editForm.date} onChange={e=>setEditForm({...editForm, date:e.target.value})} />
-                      <select className="border rounded px-3 py-2" value={editForm.grade} onChange={e=>setEditForm({...editForm, grade: Number(e.target.value) as 1|2|3|4|5})}>
-                        {[1,2,3,4,5].map(g=><option key={g} value={g}>Grade {g}</option>)}
-                      </select>
-                      <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded bg-slate-900 text-white">Save</button>
-                        <button type="button" className="px-3 py-2 rounded border" onClick={()=>setEditingId(null)}>Cancel</button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        ) : (
+        <div className="font-medium mb-2">Tournament List</div>
+        {loading ? (
+          <div className="text-sm text-slate-500">Loading…</div>
+        ) : list.length === 0 ? (
           <div className="text-sm text-slate-500">No tournaments yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {list.map(t => (
+              <button
+                key={t.id}
+                onClick={() => onSelected(t)}
+                className="w-full text-left bg-white border rounded-xl p-3 hover:bg-slate-50 active:scale-[0.99]"
+              >
+                <div className="font-medium">{t.name}</div>
+                <div className="text-xs text-slate-500">{lineInfo(t)}</div>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Create new tournament card (same width styling) */}
+      {/* Create New Tournament */}
       <div className="bg-white border rounded-2xl p-3">
         <div className="font-medium mb-2">Create New Tournament</div>
-        <form onSubmit={submitCreate} className="grid gap-2">
-          <input className="border rounded px-3 py-2" placeholder="Name*" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
-          <input className="border rounded px-3 py-2" placeholder="Venue" value={form.venue} onChange={e=>setForm({...form, venue:e.target.value})}/>
-          <input className="border rounded px-3 py-2" type="date" value={form.date} onChange={e=>setForm({...form, date:e.target.value})}/>
-          <select className="border rounded px-3 py-2" value={form.grade} onChange={e=>setForm({...form, grade: Number(e.target.value) as 1|2|3|4|5})}>
-            {[1,2,3,4,5].map(g=><option key={g} value={g}>Grade {g}</option>)}
-          </select>
-          <button disabled={creating} className="bg-black text-white rounded px-3 py-2">{creating?'Creating…':'Create & Use'}</button>
+        <form onSubmit={createTournament} className="grid gap-2">
+          <input className="border rounded px-3 py-2" placeholder="Name" value={name} onChange={e=>setName(e.target.value)} />
+          <input className="border rounded px-3 py-2" placeholder="Venue" value={venue} onChange={e=>setVenue(e.target.value)} />
+          <div className="flex gap-2">
+            <input type="date" className="border rounded px-3 py-2 flex-1" value={date} onChange={e=>setDate(e.target.value)} />
+            <input type="number" min={1} max={5} className="border rounded px-3 py-2 w-24" placeholder="Grade" value={grade} onChange={e=>setGrade(e.target.value === '' ? '' : Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-600">Age group</label>
+            <select className="border rounded px-3 py-2 w-full" value={age} onChange={e=>setAge(e.target.value)}>
+              {AGE_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <button className="px-3 py-2 rounded bg-slate-900 text-white">Create</button>
         </form>
       </div>
     </div>
