@@ -8,6 +8,9 @@ import { exportMatchCsv } from '@/lib/exportCsv'
 import type { Tournament } from '@/lib/types'
 import { useMatchStore } from '@/store/useMatchStore'
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export default function ScoringPage({
   matchId,
   tournament,
@@ -17,27 +20,23 @@ export default function ScoringPage({
   tournament: Tournament
   onBack: () => void
 }) {
-  // Pull actions from store
   const setMatch = useMatchStore((s) => s.setMatch)
-
-  // Initialize store for this match
-  useEffect(() => {
-    if (!matchId || typeof setMatch !== 'function') return
-    setMatch(matchId).catch(console.error)
-  }, [matchId, setMatch])
-
   const [tableOpen, setTableOpen] = useState(false)
   const title = useMemo(() => tournament?.name ?? 'Match', [tournament])
 
-  function handleExport() {
-    exportMatchCsv(matchId).catch(console.error)
-  }
+  useEffect(() => {
+    // debug breadcrumb
+    // eslint-disable-next-line no-console
+    console.log('[ScoringPage] matchId=', matchId, 'validUUID=', UUID_RE.test(matchId))
+    if (!UUID_RE.test(matchId)) return
+    setMatch(matchId).catch(console.error)
+  }, [matchId, setMatch])
+
+  const invalid = !UUID_RE.test(matchId)
 
   return (
     <div className="max-w-md mx-auto p-4">
       <Header title={title} onBack={onBack} />
-
-      {/* Actions */}
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs text-slate-600">
           Tournament: <span className="font-medium">{title}</span>
@@ -51,7 +50,7 @@ export default function ScoringPage({
             📊 Points
           </button>
           <button
-            onClick={handleExport}
+            onClick={() => exportMatchCsv(matchId)}
             className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
           >
             Export CSV
@@ -59,12 +58,18 @@ export default function ScoringPage({
         </div>
       </div>
 
-      {/* Performance tracking pad + stats */}
-      <PerformancePad />
-      <StatsPanel />
-
-      {/* Points table modal (latest first) */}
-      <PointsTableModal matchId={matchId} open={tableOpen} onClose={() => setTableOpen(false)} />
+      {invalid ? (
+        <div className="rounded-lg border bg-amber-50 text-amber-800 p-3 text-sm">
+          This match isn’t ready yet. Please go back and open the match again.
+          <div className="mt-1 text-xs text-amber-600">matchId: {String(matchId)}</div>
+        </div>
+      ) : (
+        <>
+          <PerformancePad />
+          <StatsPanel />
+          <PointsTableModal matchId={matchId} open={tableOpen} onClose={() => setTableOpen(false)} />
+        </>
+      )}
     </div>
   )
 }
