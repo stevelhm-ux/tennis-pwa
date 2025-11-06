@@ -42,20 +42,43 @@ function keyFor(p: { match_id: string; seq: number }) {
 }
 
 async function upsertChunk(chunk: OutboxPoint[]) {
+  // Dedupe + validate
   const map = new Map<string, OutboxPoint>()
+  const invalid: OutboxPoint[] = []
   for (const p of chunk) {
-    if (!validRow(p)) continue
-    map.set(keyFor(p), p)
+    if (!validRow(p)) invalid.push(p)
+    else map.set(keyFor(p), p)
   }
+
+  if (invalid.length) {
+    console.warn(
+      `sync: skipping ${invalid.length} invalid row(s) (non-UUID or bad seq). Sample:`,
+      invalid.slice(0, 3).map(x => ({ id: x.id, match_id: x.match_id, seq: x.seq }))
+    )
+  }
+
   const batch = Array.from(map.values())
   if (!batch.length) return { okKeys: new Set<string>(), err: null as any }
+
+  // Log first few rows we are actually sending
+  console.info(
+    `sync: upserting ${batch.length} point(s). Sample:`,
+    batch.slice(0, 3).map(x => ({ match_id: x.match_id, seq: x.seq }))
+  )
 
   const { data, error } = await supabase
     .from('points')
     .upsert(batch, { onConflict: 'match_id,seq' })
     .select('match_id, seq')
 
-  if (error) return { okKeys: new Set<string>(), err: error }
+  if (error) {
+    // On error, also print the attempted payload to pinpoint the bad row server-side
+    console.error('sync: upsert error', error, {
+      samplePayload: batch.slice(0, 3).map(x => ({ match_id: x.match_id, seq: x.seq })),
+    })
+    return { okKeys: new Set<string>(), err: error }
+  }
+
   const okKeys = new Set<string>((data || []).map((r: any) => keyFor(r)))
   return { okKeys, err: null }
 }
@@ -67,10 +90,10 @@ export async function runSync(wsId: string) {
   const pending = await box.read(wsId, 200)
   if (!pending?.length) return
 
-  // Purge invalid rows so 22P02 cannot loop
+  // Purge invalid rows upfront (so they never hit the server)
   const invalid = pending.filter(p => !validRow(p))
   if (invalid.length) {
-    console.info(`sync: purging ${invalid.length} invalid outbox items`)
+    console.info(`sync: purging ${invalid.length} invalid outbox item(s) before upsert`)
     await box.remove(wsId, invalid.map(p => p.id))
   }
 
@@ -96,6 +119,7 @@ export async function runSync(wsId: string) {
 
   if (toRemoveIds.length) {
     await box.remove(wsId, toRemoveIds)
+    console.info(`sync: removed ${toRemoveIds.length} delivered outbox item(s)`)
   }
 }
 
