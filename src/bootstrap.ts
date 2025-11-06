@@ -1,85 +1,70 @@
 // src/bootstrap.ts
 import { supabase } from '@/lib/supabase'
+import { outbox } from '@/lib/outbox'
 import { startSync } from '@/lib/sync'
 
-/** Ensure you have a workspace and are an owner member. */
-export async function ensureWorkspace(): Promise<string> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data: sess } = await supabase.auth.getSession()
-  const uid = sess?.session?.user?.id
-  if (!uid) throw new Error('Not signed in')
+/**
+ * Helper: read current user id (throws if not logged in)
+ */
+export async function ensureAuth(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw error
+  const uid = data.user?.id
+  if (!uid) throw new Error('Not authenticated')
+  return uid
+}
 
-  // Find an existing membership
-  const { data: existing } = await supabase
+/**
+ * Helper: validate that the given wsId is one the user belongs to
+ */
+async function userIsMemberOf(wsId: string, userId: string): Promise<boolean> {
+  const { data, error } = await supabase
     .from('workspace_members')
     .select('workspace_id')
-    .eq('user_id', uid)
-    .limit(1)
-
-  let wsId = existing?.[0]?.workspace_id as string | undefined
-  if (!wsId) {
-    // Create workspace (no select) then add yourself as owner
-    wsId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).toString()
-    let { error: e1 } = await supabase.from('workspaces').insert({ id: wsId, name: 'Family Team' })
-    if (e1) throw e1
-    const { error: e2 } = await supabase
-      .from('workspace_members')
-      .insert({ workspace_id: wsId, user_id: uid, role: 'owner' })
-    if (e2) throw e2
-  }
-   ;(window as any).__wsId = wsId       // so the store can find it
-  startSync(wsId)                      // 🔁 start background sync
-  return wsId!
-}
-
-/** Back-compat: builds on ensureWorkspace and ensures 2 players, returns ids. */
-export async function ensureWorkspaceAndPlayers(): Promise<{ wsId: string, aId: string, bId: string }> {
-  const wsId = await ensureWorkspace()
-
-  // Ensure two players exist
-  const { data: players } = await supabase!
-    .from('players')
-    .select('id')
     .eq('workspace_id', wsId)
-    .order('created_at', { ascending: true })
-
-  let aId = players?.[0]?.id
-  let bId = players?.[1]?.id
-  if (!aId || !bId) {
-    const toCreate: any[] = []
-    if (!aId) toCreate.push({ workspace_id: wsId, name: 'Player A', handedness: 'R' })
-    if (!bId) toCreate.push({ workspace_id: wsId, name: 'Opponent', handedness: 'R' })
-    const { data: created, error } = await supabase!
-      .from('players')
-      .insert(toCreate)
-      .select()
-    if (error) throw error
-    const all = [...(players ?? []), ...(created ?? [])]
-    aId = aId || all[0]?.id
-    bId = bId || all[1]?.id
-  }
-  return { wsId, aId: aId!, bId: bId! }
+    .eq('user_id', userId)
+    .limit(1)
+  if (error) return false
+  return !!data && data.length > 0
 }
 
-/** Back-compat: create a match under a tournament. */
-export async function createMatchWithTournament(args: {
-  wsId: string, aId: string, bId: string, tournamentId: string
-}) {
-  const { wsId, aId, bId, tournamentId } = args
-  if (!supabase) throw new Error('Supabase not configured')
+/**
+ * Helper: find ANY workspace for the user (returns the first)
+ */
+async function findAnyWorkspaceFor(userId: string): Promise<string | null> {
   const { data, error } = await supabase
-    .from('matches')
-    .insert({
-      workspace_id: wsId,
-      player_a_id: aId,
-      player_b_id: bId,
-      tournament_id: tournamentId,
-      event: 'Tournament',
-      surface: 'Hard',
-      format: 'BO3'
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return data.id as string
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', userId)
+    .limit(1)
+  if (error) return null
+  return data && data[0]?.workspace_id ? data[0].workspace_id : null
 }
+
+/**
+ * Helper: create a brand-new workspace and add the current user as owner.
+ * Requires either:
+ *  - your "bootstrap owner" policy on workspace_members, or
+ *  - the app’s service role on the server side (not used here).
+ */
+async function createWorkspaceFor(userId: string): Promise<string> {
+  // 1) Create workspace
+  const { data: wsIns, error: wsErr } = await supabase
+    .from('workspaces')
+    .insert({ name: 'Tennis Tracker' })
+    .select('id')
+    .single()
+  if (wsErr) throw wsErr
+  const wsId = wsIns.id as string
+
+  // 2) Add first membership as owner (relies on your "wm bootstrap owner" policy)
+  const { error: memErr } = await supabase
+    .from('workspace_members')
+    .insert({ workspace_id: wsId, user_id: userId, role: 'owner' })
+  if (memErr) throw memErr
+
+  return wsId
+}
+
+/**
+ * Ensu*
