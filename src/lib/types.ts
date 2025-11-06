@@ -11,6 +11,7 @@ export interface Tournament {
   venue?: string | null
   date?: string | null   // YYYY-MM-DD
   grade?: 1|2|3|4|5
+  age_group?: 'U8' | 'U9' | 'U10' | 'U11' | null
   created_by?: string | null
   created_at?: string
 }
