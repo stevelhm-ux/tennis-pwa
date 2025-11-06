@@ -47,10 +47,17 @@ export async function updateMatch(matchId: string, patch: Partial<Pick<Match,'ev
 }
 
 /* NEW: change opponent by name (creates player if needed) */
-export async function updateMatchOpponent(wsId: string, matchId: string, opponentName: string) {
+export async function updateMatchOpponent(matchId: string, opponentName: string) {
+  // fetch the match to get wsId
+  const { data: m, error: e1 } = await supabase!.from('matches').select('workspace_id').eq('id', matchId).single()
+  if (e1) throw e1
+  const wsId = (m as any).workspace_id as string
   const opp = await getOrCreateOpponent(wsId, opponentName.trim())
-  return updateMatchPlayerB(matchId, opp.id)
+  const { error } = await supabase!.from('matches').update({ player_b_id: opp.id }).eq('id', matchId)
+  if (error) throw error
+  return opp
 }
+
 
 async function updateMatchPlayerB(matchId: string, playerBId: string) {
   if (!supabase) throw new Error('Supabase not configured')
