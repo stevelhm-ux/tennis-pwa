@@ -13,24 +13,22 @@ export async function listMatches(tournamentId: string): Promise<Match[]> {
   return data as Match[]
 }
 
-export async function createMatch(args: {
-  wsId: string, tournamentId: string,
-  playerAId: string, playerBId: string
-}): Promise<Match> {
-  if (!supabase) throw new Error('Supabase not configured')
+export async function createMatch({
+  wsId, tournamentId, playerAId, playerBId
+}: { wsId:string; tournamentId:string; playerAId:string; playerBId:string }) {
   const { data, error } = await supabase
     .from('matches')
     .insert({
-      workspace_id: args.wsId,
-      tournament_id: args.tournamentId,
-      player_a_id: args.playerAId,
-      player_b_id: args.playerBId,
-      event: 'Tournament', surface: 'Hard', format: 'BO3'
+      workspace_id: wsId,
+      tournament_id: tournamentId,
+      player_a_id: playerAId,
+      player_b_id: playerBId
     })
-    .select()
+    .select('id')              // 👈 get real UUID from server
     .single()
+
   if (error) throw error
-  return data as Match
+  return data as { id: string }
 }
 
 /* NEW: update generic match fields */
