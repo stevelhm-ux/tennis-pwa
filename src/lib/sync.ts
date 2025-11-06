@@ -2,7 +2,6 @@
 import { supabase } from '@/lib/supabase'
 
 type AB = 'A' | 'B'
-
 export type OutboxPoint = {
   id: string
   match_id: string
@@ -38,7 +37,6 @@ const UUID_RE =
 function validRow(p: { match_id: string; seq: number }) {
   return UUID_RE.test(p.match_id) && Number.isInteger(p.seq) && p.seq > 0
 }
-
 function keyFor(p: { match_id: string; seq: number }) {
   return `${p.match_id}:${p.seq}`
 }
@@ -58,7 +56,6 @@ async function upsertChunk(chunk: OutboxPoint[]) {
     .select('match_id, seq')
 
   if (error) return { okKeys: new Set<string>(), err: error }
-
   const okKeys = new Set<string>((data || []).map((r: any) => keyFor(r)))
   return { okKeys, err: null }
 }
@@ -70,9 +67,12 @@ export async function runSync(wsId: string) {
   const pending = await box.read(wsId, 200)
   if (!pending?.length) return
 
-  // Auto-purge invalid rows so 22P02 can’t loop
-  const invalidIds = pending.filter(p => !validRow(p)).map(p => p.id)
-  if (invalidIds.length) await box.remove(wsId, invalidIds)
+  // Purge invalid rows so 22P02 cannot loop
+  const invalid = pending.filter(p => !validRow(p))
+  if (invalid.length) {
+    console.info(`sync: purging ${invalid.length} invalid outbox items`)
+    await box.remove(wsId, invalid.map(p => p.id))
+  }
 
   const clean = pending.filter(p => validRow(p))
   if (!clean.length) return
@@ -106,6 +106,7 @@ export function startSync(wsId: string, intervalMs = 5000) {
     clearInterval(w.__syncTimer as number)
     w.__syncTimer = null
   }
+  w.__wsId = wsId
   w.__syncWsId = wsId
   w.__syncTimer = setInterval(() => {
     runSync(wsId).catch((e) => console.error('sync loop error', e))
