@@ -5,6 +5,8 @@ import App from './App'
 import AuthGate from './AuthGate'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import AuthCallback from './pages/AuthCallback'
+import { outbox } from '@/lib/outbox'
+;(window as any).__outbox = outbox
 import './index.css'
 
 // Render
