@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchServerMaxSeq } from '@/lib/points'
 import type { Point, AB } from '@/lib/types'
 
-/** Structure you use to add a new point from the UI (PerformancePad) */
+/** Structure to add a new point from the UI (PerformancePad) */
 export type PointInput = {
   server: AB
   first_serve_in: boolean | null
@@ -136,4 +136,79 @@ export const useMatchStore = create<State>((set, get) => ({
     // Allocate a seq from current counter
     const seqNow = get().nextSeq[matchId] ?? 1
 
-    const nowIso =
+    const nowIso = new Date().toISOString()
+    const localPoint: Point = {
+      id: crypto?.randomUUID?.() || nanoid(), // local-only id; server has its own
+      match_id: matchId,
+      seq: seqNow,
+      server: p.server,
+      first_serve_in: p.first_serve_in,
+      second_serve_in: p.second_serve_in,
+      rally_len: p.rally_len,
+      finishing_shot: p.finishing_shot,
+      outcome: p.outcome,
+      finish_type: p.finish_type,
+      tags: p.tags,
+      created_at: nowIso,
+      deleted_at: null,
+    } as any
+
+    // Update UI immediately
+    set(s => ({
+      points: [...s.points, localPoint],
+      nextSeq: { ...s.nextSeq, [matchId]: seqNow + 1 },
+    }))
+
+    // Enqueue to outbox for background sync (idempotent upsert on match_id,seq)
+    try {
+      const wsId = getWsId()
+      const outbox: OutboxPoint = {
+        id: nanoid(),
+        match_id: matchId,
+        seq: seqNow,
+        server: p.server,
+        first_serve_in: p.first_serve_in,
+        second_serve_in: p.second_serve_in,
+        rally_len: p.rally_len,
+        finishing_shot: p.finishing_shot,
+        outcome: p.outcome,
+        finish_type: p.finish_type,
+        tags: p.tags,
+        created_at: nowIso,
+        deleted_at: null,
+      }
+      await (window as any).__outbox?.append?.(wsId, outbox)
+    } catch (e) {
+      console.error('append to outbox failed', e)
+      // Optional: roll back local state if you want strictness
+    }
+  },
+
+  undo: () => {
+    const matchId = get().matchId
+    if (!matchId) return
+
+    set(s => {
+      // find last point for this match
+      for (let i = s.points.length - 1; i >= 0; i--) {
+        if (s.points[i].match_id === matchId) {
+          const removed = s.points[i]
+          const nextSeqVal = s.nextSeq[matchId] ?? 1
+          // If we’re undoing the most recent seq, roll back the counter by 1 (but not below 1)
+          const shouldDecrement = removed.seq === nextSeqVal - 1
+          const newNext = Math.max(1, shouldDecrement ? nextSeqVal - 1 : nextSeqVal)
+          return {
+            points: [...s.points.slice(0, i), ...s.points.slice(i + 1)],
+            nextSeq: { ...s.nextSeq, [matchId]: newNext },
+          }
+        }
+      }
+      return s
+    })
+
+    // Note: we do NOT attempt to remove a pending outbox row here (requires outbox API support).
+    // Server upsert (onConflict match_id,seq) makes retries idempotent anyway.
+  },
+
+  reset: () => set({ matchId: null, points: [], nextSeq: {} }),
+}))
