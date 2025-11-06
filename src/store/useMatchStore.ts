@@ -5,6 +5,10 @@ import { supabase } from '@/lib/supabase'
 import { fetchServerMaxSeq } from '@/lib/points'
 import type { Point, AB } from '@/lib/types'
 
+/** Strict UUID v4/5 checker (accepts v1–v5 per [1-5]) */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 /** Structure to add a new point from the UI (PerformancePad) */
 export type PointInput = {
   server: AB
@@ -42,7 +46,7 @@ type State = {
   /** Next seq to use per match (initialized via initMatchSeq) */
   nextSeq: Record<string, number>
 
-  /** Set the current match (and optionally preload points) */
+  /** Set the current match (and preload points + seq) */
   setMatch: (matchId: string) => Promise<void>
 
   /** Pull points from server (for current match) and put into store (ascending by seq) */
@@ -75,7 +79,7 @@ async function readPendingOutboxMaxSeq(matchId: string): Promise<number> {
     const pending: OutboxPoint[] = await box.read(wsId)
     let maxSeq = 0
     for (const p of pending || []) {
-      if (p.match_id === matchId && typeof p.seq === 'number') {
+      if (p.match_id === matchId && Number.isInteger(p.seq)) {
         if (p.seq > maxSeq) maxSeq = p.seq
       }
     }
@@ -91,6 +95,10 @@ export const useMatchStore = create<State>((set, get) => ({
   nextSeq: {},
 
   setMatch: async (matchId: string) => {
+    // ✅ Guard: refuse invalid IDs so we never enqueue bad match_ids
+    if (!UUID_RE.test(matchId)) {
+      throw new Error(`Invalid matchId passed to setMatch: ${matchId}`)
+    }
     set({ matchId, points: [] })
     await get().loadFromServer()
     await get().initMatchSeq(matchId)
@@ -131,7 +139,12 @@ export const useMatchStore = create<State>((set, get) => ({
 
   addPoint: async (p: PointInput) => {
     const matchId = get().matchId
-    if (!matchId) throw new Error('No match selected')
+    // ✅ Guard: refuse to enqueue unless matchId is a real UUID
+    if (!matchId || !UUID_RE.test(matchId)) {
+      console.error('Refusing to add point: invalid matchId', matchId)
+      alert('Match isn’t ready yet. Please open the match again.')
+      return
+    }
 
     // Allocate a seq from current counter
     const seqNow = get().nextSeq[matchId] ?? 1
@@ -162,7 +175,7 @@ export const useMatchStore = create<State>((set, get) => ({
     // Enqueue to outbox for background sync (idempotent upsert on match_id,seq)
     try {
       const wsId = getWsId()
-      const outbox: OutboxPoint = {
+      const outboxRow: OutboxPoint = {
         id: nanoid(),
         match_id: matchId,
         seq: seqNow,
@@ -177,10 +190,12 @@ export const useMatchStore = create<State>((set, get) => ({
         created_at: nowIso,
         deleted_at: null,
       }
-      await (window as any).__outbox?.append?.(wsId, outbox)
+      await (window as any).__outbox?.append?.(wsId, outboxRow)
+      // Optional: quick debug
+      // const sz = await (window as any).__outbox?.size?.(wsId); console.log('outbox size →', sz)
     } catch (e) {
       console.error('append to outbox failed', e)
-      // Optional: roll back local state if you want strictness
+      // (Optional) You could roll back local state here if you want strictness.
     }
   },
 
@@ -206,8 +221,8 @@ export const useMatchStore = create<State>((set, get) => ({
       return s
     })
 
-    // Note: we do NOT attempt to remove a pending outbox row here (requires outbox API support).
-    // Server upsert (onConflict match_id,seq) makes retries idempotent anyway.
+    // Note: we do NOT attempt to remove a pending outbox row here (requires your outbox API to support it).
+    // The server upsert (onConflict match_id,seq) makes retries idempotent anyway.
   },
 
   reset: () => set({ matchId: null, points: [], nextSeq: {} }),
