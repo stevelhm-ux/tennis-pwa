@@ -2,6 +2,34 @@
 import { supabase } from '@/lib/supabase'
 import type { Match } from '@/lib/types'
 
+/** Find a player by exact name in a workspace; returns the id or null */
+async function findPlayerIdByName(wsId: string, name: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('players')
+    .select('id')
+    .eq('workspace_id', wsId)
+    .eq('name', name)
+    .limit(1)
+
+  if (error) throw error
+  return data?.[0]?.id ?? null
+}
+
+/** Ensure a player exists (by name) in a workspace; returns the id */
+async function ensurePlayerId(wsId: string, name: string): Promise<string> {
+  const existing = await findPlayerIdByName(wsId, name)
+  if (existing) return existing
+
+  const { data, error } = await supabase
+    .from('players')
+    .insert({ workspace_id: wsId, name })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  return data.id as string
+}
+
 /**
  * Create a match and return the server UUID.
  * Use the returned id when navigating to the scoring page.
@@ -55,7 +83,7 @@ export async function getMatch(matchId: string): Promise<Match | null> {
     .single()
 
   if (error) {
-    // PostgREST not-found code differs by version; treat any single() error as null-ish if no data
+    // PostgREST not-found code varies; if no data returned, treat as null
     if ((error as any).code === 'PGRST116') return null
     throw error
   }
@@ -79,17 +107,25 @@ export async function updateMatch(
 }
 
 /**
- * Update the opponent name for a match.
- * Assumes your schema has a `opponent_name text` column on `matches`.
- * (If you store opponent differently, adjust this to the actual column.)
+ * Update the opponent for a match by **name**:
+ * - ensure a Player row exists in the same workspace (create if needed)
+ * - set matches.player_b_id to that player's id
+ *
+ * Returns the updated match.
  */
 export async function updateMatchOpponent(
-  matchId: string,
-  opponentName: string
+  params: { matchId: string; wsId: string; opponentName: string }
 ): Promise<Match> {
+  const { matchId, wsId, opponentName } = params
+  if (!opponentName?.trim()) {
+    throw new Error('opponentName is required')
+  }
+
+  const playerBId = await ensurePlayerId(wsId, opponentName.trim())
+
   const { data, error } = await supabase
     .from('matches')
-    .update({ opponent_name: opponentName })
+    .update({ player_b_id: playerBId })
     .eq('id', matchId)
     .select('*')
     .single()
