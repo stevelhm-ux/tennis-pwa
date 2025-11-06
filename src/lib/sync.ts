@@ -1,9 +1,17 @@
 // src/lib/sync.ts
+// Idempotent background sync for points outbox -> Supabase
+// - UPSERT on (match_id, seq) so retries are safe
+// - Dedupes a batch by (match_id,seq)
+// - Removes ONLY rows that actually succeeded server-side
+// - Auto-purges invalid outbox rows (non-UUID match_id, bad seq)
+// - Single global timer guard
+
 import { supabase } from '@/lib/supabase'
 
 type AB = 'A' | 'B'
+
 export type OutboxPoint = {
-  id: string
+  id: string // client uid for outbox row
   match_id: string
   seq: number
   server: AB
@@ -22,6 +30,7 @@ type OutboxAPI = {
   read: (wsId: string, limit?: number) => Promise<OutboxPoint[]>
   remove: (wsId: string, ids: string[]) => Promise<void>
   size?: (wsId: string) => Promise<number>
+  clear?: (wsId: string) => Promise<void>
 }
 
 function getOutbox(): OutboxAPI | null {
@@ -30,7 +39,14 @@ function getOutbox(): OutboxAPI | null {
   return box as OutboxAPI
 }
 
-function keyFor(p: Pick<OutboxPoint, 'match_id' | 'seq'>) {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function validRow(p: { match_id: string; seq: number }) {
+  return UUID_RE.test(p.match_id) && Number.isInteger(p.seq) && p.seq > 0
+}
+
+function keyFor(p: { match_id: string; seq: number }) {
   return `${p.match_id}:${p.seq}`
 }
 
@@ -38,7 +54,7 @@ async function upsertChunk(chunk: OutboxPoint[]) {
   // Defensive: sanitize and dedupe this chunk
   const map = new Map<string, OutboxPoint>()
   for (const p of chunk) {
-    if (!p?.match_id || typeof p.seq !== 'number') continue
+    if (!validRow(p)) continue
     map.set(keyFor(p), p)
   }
   const batch = Array.from(map.values())
@@ -47,10 +63,9 @@ async function upsertChunk(chunk: OutboxPoint[]) {
   const { data, error } = await supabase
     .from('points')
     .upsert(batch, { onConflict: 'match_id,seq' })
-    .select('match_id, seq') // important: get back exactly what succeeded
+    .select('match_id, seq') // ← return only successful rows
 
   if (error) {
-    // On true error, nothing to remove at this stage
     return { okKeys: new Set<string>(), err: error }
   }
 
@@ -59,11 +74,8 @@ async function upsertChunk(chunk: OutboxPoint[]) {
 }
 
 /**
- * Only remove from outbox the rows that:
- *  - either were returned by the upsert (success),
- *  - or would be duplicates (conflict) that the server already has.
- *
- * For real errors (401/403/42501/etc.), keep items so they retry later.
+ * Only remove from outbox the rows that actually succeeded (present in upsert SELECT).
+ * Purges invalid rows before attempting upsert (prevents 22P02 loops).
  */
 export async function runSync(wsId: string) {
   const box = getOutbox()
@@ -72,32 +84,33 @@ export async function runSync(wsId: string) {
   const pending = await box.read(wsId, 200)
   if (!pending?.length) return
 
+  // Auto-purge invalid items (non-UUID match_id, bad seq)
+  const invalidIds = pending.filter(p => !validRow(p)).map(p => p.id)
+  if (invalidIds.length) {
+    await box.remove(wsId, invalidIds)
+  }
+
+  const clean = pending.filter(p => validRow(p))
+  if (!clean.length) return
+
   // Process in small chunks so partial failures are isolated
   const chunkSize = 50
   const toRemoveIds: string[] = []
 
-  for (let i = 0; i < pending.length; i += chunkSize) {
-    const slice = pending.slice(i, i + chunkSize)
+  for (let i = 0; i < clean.length; i += chunkSize) {
+    const slice = clean.slice(i, i + chunkSize)
     const { okKeys, err } = await upsertChunk(slice)
 
     if (err) {
-      // If it's a duplicate-key error (shouldn't happen with upsert, but just in case),
-      // treat those keys as successful.
-      if ((err as any)?.code === '23505') {
-        // keep nothing (unknown which rows succeeded); safer to keep items for retry
-        console.warn('runSync duplicate-key error; will retry later', err)
-        continue
-      }
-
       // Auth (401/403) or RLS (42501) — keep items for later retry
+      // 23505 shouldn't appear with upsert; if it does, keep items and retry later
       console.warn('runSync chunk error; keeping items for retry', err)
       continue
     }
 
     // SUCCESS PATH: remove only the items that actually succeeded
-    const okSet = okKeys
     for (const p of slice) {
-      if (okSet.has(keyFor(p))) {
+      if (okKeys.has(keyFor(p))) {
         toRemoveIds.push(p.id)
       }
     }
@@ -108,26 +121,26 @@ export async function runSync(wsId: string) {
   }
 }
 
-/** Single global loop guard */
+/** Starts a single global sync timer (guarded). */
 export function startSync(wsId: string, intervalMs = 5000) {
   const w = window as any
   if (w.__syncTimer && w.__syncWsId === wsId) return
+
   if (w.__syncTimer) {
     clearInterval(w.__syncTimer as number)
     w.__syncTimer = null
   }
+
   w.__syncWsId = wsId
   w.__syncTimer = setInterval(() => {
     runSync(wsId).catch((e) => console.error('sync loop error', e))
   }, Math.max(2000, intervalMs))
-  w.__stopSync = () => {
-    if (w.__syncTimer) {
-      clearInterval(w.__syncTimer as number)
-      w.__syncTimer = null
-      w.__syncWsId = null
-    }
-  }
+
+  // optional debug helper
+  w.runSyncNow = () => runSync(wsId)
 }
+
+/** Stop the current sync loop, if any. */
 export function stopSync() {
   const w = window as any
   if (w.__syncTimer) {
