@@ -6,6 +6,7 @@ import { ensureWorkspace } from '@/bootstrap'
 import type { Tournament } from '@/lib/types'
 import { getMyPlayer, setMyPlayerByName } from '@/lib/prefs'
 import { exportWorkspaceCsv } from '@/lib/exportCsv'
+import { getMyRole } from '@/lib/members'
 
 export default function TournamentsPage({
   onEnterTournament,
@@ -13,14 +14,25 @@ export default function TournamentsPage({
   onEnterTournament: (t: Tournament, wsId: string) => void
 }) {
   const [wsId, setWsId] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
+
   const [myPlayerName, setMyPlayerName] = useState<string>('')
   const [editing, setEditing] = useState(false)
   const [inputVal, setInputVal] = useState('')
 
+  // Resolve workspace id and load my player + role
   useEffect(() => {
     (async () => {
       const id = await ensureWorkspace()
       setWsId(id)
+
+      try {
+        const role = await getMyRole(id)
+        setIsOwner(role === 'owner') // owner-only reset button (change if you want admin too)
+      } catch (e) {
+        console.error('getMyRole error', e)
+      }
+
       try {
         const p = await getMyPlayer(id)
         if (p) {
@@ -34,7 +46,7 @@ export default function TournamentsPage({
           }
         }
       } catch (e) {
-        console.error(e)
+        console.error('getMyPlayer error', e)
       }
     })().catch(console.error)
   }, [])
@@ -138,13 +150,15 @@ export default function TournamentsPage({
               Export All CSV
             </button>
           )}
-          <button
-            onClick={resetLocal}
-            className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-rose-50"
-            title="Clear local storage, caches, and service worker"
-          >
-            Reset local data
-          </button>
+          {isOwner && (
+            <button
+              onClick={resetLocal}
+              className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-rose-50"
+              title="Clear local storage, caches, and service worker"
+            >
+              Reset local data
+            </button>
+          )}
         </div>
       </div>
 
