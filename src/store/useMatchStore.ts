@@ -27,7 +27,7 @@ export type OutboxPoint = {
   first_serve_in: boolean | null
   second_serve_in: boolean | null
   rally_len: number | null
-  finishing_shot: 'FH' | 'BH' | 'Volley' | 'Overhead' | null
+  finishing_shot: 'FH' | 'BH' | 'Overhead' | null
   outcome: AB
   finish_type: 'Winner' | 'UE' | 'Forced' | 'Ace' | 'DF' | null
   tags: string[] | null
@@ -87,7 +87,7 @@ export const useMatchStore = create<State>((set, get) => ({
   loadFromServer: async () => {
     const matchId = get().matchId
     if (!matchId) return
-    const { data, error } = await supabase!
+    const { data, error } = await supabase
       .from('points')
       .select('*')
       .eq('match_id', matchId)
@@ -172,7 +172,6 @@ export const useMatchStore = create<State>((set, get) => ({
   undo: () => {
     const matchId = get().matchId
     if (!matchId) return
-
     set(s => {
       for (let i = s.points.length - 1; i >= 0; i--) {
         if (s.points[i].match_id === matchId) {
