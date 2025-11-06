@@ -12,6 +12,8 @@ import { getPlayersByIds } from '@/lib/players'
 import { getTournamentById } from '@/lib/tournaments'
 import { exportMatchCsv } from '@/lib/exportCsv'
 import PerformancePad from '@/components/PerformancePad'
+import PointsTableModal from '@/components/PointsTableModal'
+import { exportMatchCsv } from '@/lib/exportCsv'
 
 export default function ScoringPage({
   matchId,
@@ -71,6 +73,8 @@ export default function ScoringPage({
   }, [matchId, tournament?.name, myPlayerName])
 
   const score = useMemo(() => computeLiveScore(points), [points])
+  
+  const [tableOpen, setTableOpen] = useState(false)
 
   // --- Export to CSV (points of this match) ---
  function exportCSV() {
@@ -79,24 +83,28 @@ export default function ScoringPage({
 
   return (
     <div className="max-w-md mx-auto p-4">
-      {/* Header shows tournament name */}
       <Header title={title} onBack={onBack} />
 
-      {/* Actions bar: tournament name on left, Export on right (no match ID) */}
+      {/* Actions */}
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs text-slate-600">
           Tournament: <span className="font-medium">{title}</span>
         </div>
-        <button
-          onClick={exportCSV}
-          className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50"
-        >
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTableOpen(true)} className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50" title="View points table">
+            📊 Points
+          </button>
+          <button onClick={exportCSV} className="px-3 py-1 rounded-lg border bg-white text-sm hover:bg-slate-50">
+            Export CSV
+          </button>
+        </div>
       </div>
-      
+
+      {/* Your performance pad + stats */}
       <PerformancePad />
       <StatsPanel />
+
+      <PointsTableModal matchId={matchId} open={tableOpen} onClose={()=>setTableOpen(false)} />
     </div>
   )
 }
