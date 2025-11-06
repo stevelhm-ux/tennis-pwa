@@ -7,7 +7,9 @@ function load(wsId: string): OutboxPoint[] {
   try {
     const raw = localStorage.getItem(KEY(wsId))
     return raw ? (JSON.parse(raw) as OutboxPoint[]) : []
-  } catch { return [] }
+  } catch {
+    return []
+  }
 }
 function save(wsId: string, rows: OutboxPoint[]) {
   localStorage.setItem(KEY(wsId), JSON.stringify(rows))
@@ -18,7 +20,9 @@ export const outbox = {
     return load(wsId).slice(0, limit)
   },
   async append(wsId: string, row: OutboxPoint): Promise<void> {
-    const arr = load(wsId); arr.push(row); save(wsId, arr)
+    const arr = load(wsId)
+    arr.push(row)
+    save(wsId, arr)
   },
   async remove(wsId: string, ids: string[]): Promise<void> {
     const set = new Set(ids)
